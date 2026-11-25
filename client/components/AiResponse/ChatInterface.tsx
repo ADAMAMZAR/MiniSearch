@@ -21,6 +21,7 @@ import {
   followUpQuestionPubSub,
   getChatGenerationState,
   getFollowUpQuestion,
+  getTextGenerationState,
   imageSearchResultsPubSub,
   queryPubSub,
   settingsPubSub,
@@ -286,6 +287,9 @@ export default function ChatInterface({
     // follow-up that was showing to put back if the regeneration fails.
     const previousAnswer = messages[messages.length - 1];
     const previousFollowUpQuestion = getFollowUpQuestion();
+    // Left over from stopping an earlier answer, so it says nothing about
+    // this regeneration.
+    const interruptedBeforeStart = getTextGenerationState() === "interrupted";
 
     setMessages(history);
     setGenerationState({
@@ -318,16 +322,27 @@ export default function ChatInterface({
         regenerateFollowUpQuestion(lastUser.content, finalResponse);
       }
     } catch (error) {
-      addLogEntry(`Error re-generating response: ${error}`);
+      // Stop sets the shared state to "interrupted". The backends then throw
+      // different errors (a plain Error from OpenAI, ChatGenerationError from
+      // Horde, which also uses it for real failures), so the state is the signal.
+      const stoppedByUser =
+        !interruptedBeforeStart && getTextGenerationState() === "interrupted";
+      addLogEntry(
+        stoppedByUser
+          ? "AI response re-generation stopped"
+          : `Error re-generating response: ${error}`,
+      );
       if (isMountedRef.current) {
         setStreamedResponse("");
         setMessages((prev) => [...prev, previousAnswer]);
         setFollowUpQuestion(previousFollowUpQuestion);
-        notifications.show({
-          message:
-            "Couldn't re-generate the response. The previous answer has been kept.",
-          color: "red",
-        });
+        if (!stoppedByUser) {
+          notifications.show({
+            message:
+              "Couldn't re-generate the response. The previous answer has been kept.",
+            color: "red",
+          });
+        }
       }
     } finally {
       if (isMountedRef.current) {

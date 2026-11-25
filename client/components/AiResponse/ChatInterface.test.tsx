@@ -7,7 +7,9 @@ import {
   followUpQuestionPubSub,
   getSuppressNextFollowUp,
   suppressNextFollowUpPubSub,
+  textGenerationStatePubSub,
 } from "@/modules/pubSub";
+import { ChatGenerationError } from "@/modules/textGenerationUtilities";
 import type { ChatMessage } from "@/modules/types";
 import ChatInterface from "./ChatInterface";
 
@@ -16,6 +18,7 @@ const [updateChatGenerationState, , getChatGenerationState] =
 const [updateChatInput] = chatInputPubSub;
 const [updateFollowUpQuestion, , getFollowUpQuestion] = followUpQuestionPubSub;
 const [updateSuppressNextFollowUp] = suppressNextFollowUpPubSub;
+const [updateTextGenerationState] = textGenerationStatePubSub;
 
 vi.mock("@/modules/textGeneration", () => ({
   generateChatResponse: vi.fn(),
@@ -123,6 +126,7 @@ beforeEach(() => {
   updateChatInput("");
   updateFollowUpQuestion("");
   updateSuppressNextFollowUp(false);
+  updateTextGenerationState("idle");
   messageListMessages = [];
   messageListIsGenerating = false;
   vi.mocked(generateChatResponse).mockResolvedValue("An answer.");
@@ -830,6 +834,67 @@ describe("ChatInterface failed regeneration", () => {
 
     expect(notifications.show).not.toHaveBeenCalled();
     expect(getFollowUpQuestion()).toBe("A question from the next chat?");
+  });
+
+  it("keeps the previous answer without a failure notification when Stop is pressed", async () => {
+    vi.mocked(generateChatResponse)
+      .mockResolvedValueOnce("An answer.")
+      .mockImplementationOnce(async () => {
+        updateTextGenerationState("interrupted");
+        throw new Error("Chat generation interrupted");
+      });
+
+    renderChatInterface();
+    await act(async () => {
+      await sendMessage(nextQuestion);
+    });
+    await act(async () => {
+      await regenerateResponse();
+    });
+
+    expect(messageListMessages.at(-1)).toEqual({
+      role: "assistant",
+      content: "An answer.",
+    });
+    expect(getFollowUpQuestion()).toBe("A question?");
+    expect(notifications.show).not.toHaveBeenCalled();
+    expect(addLogEntry).toHaveBeenCalledWith(
+      "AI response re-generation stopped",
+    );
+  });
+
+  it("still shows the notification for a ChatGenerationError that was not a Stop", async () => {
+    vi.mocked(generateChatResponse)
+      .mockResolvedValueOnce("An answer.")
+      .mockRejectedValueOnce(new ChatGenerationError("Generation failed"));
+
+    renderChatInterface();
+    await act(async () => {
+      await sendMessage(nextQuestion);
+    });
+    await act(async () => {
+      await regenerateResponse();
+    });
+
+    expect(notifications.show).toHaveBeenCalledTimes(1);
+    expect(messageListMessages.at(-1)?.content).toBe("An answer.");
+  });
+
+  it("still shows the notification when Stop was pressed on an earlier answer", async () => {
+    vi.mocked(generateChatResponse)
+      .mockResolvedValueOnce("An answer.")
+      .mockRejectedValueOnce(new Error("network down"));
+
+    renderChatInterface();
+    await act(async () => {
+      await sendMessage(nextQuestion);
+    });
+    updateTextGenerationState("interrupted");
+    await act(async () => {
+      await regenerateResponse();
+    });
+
+    expect(notifications.show).toHaveBeenCalledTimes(1);
   });
 
   it("shows no notification when the regeneration succeeds", async () => {

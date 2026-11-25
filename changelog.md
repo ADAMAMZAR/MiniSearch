@@ -4,6 +4,7 @@ Notable changes, grouped by date, most recent first.
 
 ## 2026-11-26
 
+- Stopping a regeneration no longer reports it as a failure. Pressing Stop while an answer was being regenerated put the previous answer back but also showed the red "Couldn't re-generate the response" notification, which read as an error for something the user chose to do. A stopped regeneration now restores the previous answer quietly; a real failure still shows the notification.
 - A failed regeneration no longer loses the answer. Regenerate removed the answer from the chat before asking for a new one, and when the model errored it was gone, with the regenerate button, and the follow-up suggestion was cleared too, so the question had to be typed again; the only trace was a line in the logs. The previous answer and the follow-up suggestion now come back, a red notification says the regeneration failed, and the answer can be regenerated again.
 
 ## 2026-11-25
