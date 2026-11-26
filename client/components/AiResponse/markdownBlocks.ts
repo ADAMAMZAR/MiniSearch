@@ -121,12 +121,15 @@ export function splitMarkdownBlocks(content: string): string[] {
   }
 
   if (hasDefinitions) {
-    return [
-      lines
-        .join("\n")
-        .replace(/^(?:[ \t\r]*\n)+/, "")
-        .replace(/(?:\n[ \t\r]*)+$/, ""),
-    ];
+    // Trimmed on the lines rather than with a regex on the joined string,
+    // which took quadratic time on a long run of blank lines. A line counts as
+    // blank when it holds only spaces, tabs and \r, as before.
+    const isBlank = (line: string) => !/[^ \t\r]/.test(line);
+    let start = 0;
+    let end = lines.length;
+    while (start < end && isBlank(lines[start])) start++;
+    while (end > start && isBlank(lines[end - 1])) end--;
+    return [lines.slice(start, end).join("\n")];
   }
 
   flush();

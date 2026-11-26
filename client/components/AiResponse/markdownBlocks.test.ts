@@ -137,6 +137,31 @@ describe("splitMarkdownBlocks", () => {
     ).toEqual(["See [a][1].\n\n[1]: https://a.example"]);
   });
 
+  it("keeps a long blank run in the middle of an answer kept in one block", () => {
+    const blankRun = "\n".repeat(20000);
+    expect(
+      splitMarkdownBlocks(
+        `See [a][1].\n${blankRun}More text.\n\n[1]: https://a.example`,
+      ),
+    ).toEqual([`See [a][1].\n${blankRun}More text.\n\n[1]: https://a.example`]);
+  });
+
+  it("drops a long trailing blank run from an answer kept in one block", () => {
+    expect(
+      splitMarkdownBlocks(
+        `See [a][1].\n\n[1]: https://a.example${"\n \t\r".repeat(20000)}`,
+      ),
+    ).toEqual(["See [a][1].\n\n[1]: https://a.example"]);
+  });
+
+  it("keeps a line holding a non-breaking space in an answer kept in one block", () => {
+    expect(
+      splitMarkdownBlocks(
+        "\u00a0\nSee [a][1].\n\n[1]: https://a.example\n\u00a0",
+      ),
+    ).toEqual(["\u00a0\nSee [a][1].\n\n[1]: https://a.example\n\u00a0"]);
+  });
+
   it("still splits when a definition-like line sits inside a code fence", () => {
     expect(
       splitMarkdownBlocks("```\n[1]: https://a.example\n```\n\ntext"),
